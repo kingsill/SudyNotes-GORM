@@ -196,5 +196,185 @@ func stringPointer(s []Student) {
 		fmt.Println(string(marshal))
 	}
 }
+```
 
+# 使用结构体查询
+&emsp;&emsp;使用结构体查询，会过滤零值
+&emsp;&emsp;并且结构体中的条件都是and关系
+
+```go{.line-numbers}
+	// 会过滤零值
+	DB.Where(&Student{Name: "李元芳", Age: 0}).Find(&SList)
+	// SELECT * FROM `students` WHERE `students`.`name` = '李元芳' //这里的age=0条件被过滤
+	fmt.Println(SList)
+```
+
+# 使用map查询
+不会过滤零值
+```go
+//使用map查询，不会过滤零值
+DB.Where(map[string]any{"name": "李元芳", "age": 0}).Find(&SList)
+// SELECT * FROM `students` WHERE `age` = 0 AND `name` = '李元芳'
+fmt.Println(SList)
+```
+
+# 智能选择字段 
+&emsp;&emsp;GORM 允许通过 Select 方法选择特定的字段，如果您在应用程序中经常使用此功能，你也可以定义一个较小的**结构体**，以实现调用 API 时自动选择特定的字段，例如：
+ 
+## select方法实现 选择字段
+
+```go
+	//select方法
+	DB.Select("name", "age").Find(&SList)
+	fmt.Println(SList)
+	// 没有被选中，会被赋零值
+```
+查询结果：
+>[{0 李元芳 32 <nil> false} {0 张武 18 <nil> false} {0 枫枫 23 <nil> false} {0 刘大 54 <nil> false} {0 李武 23 <nil> false} {0 李琦 14 <nil> false} {0 晓梅 25 <nil> false} {0 如燕 26 <nil> false} {0 魔灵 21 <nil> false}]
+
+可以看到每个记录都查询，只是无关的字段内容为0
+scan用于将查询的结果扫描到切片
+因此需要select+scan进行配合
+
+## 结构体 实现 选择字段
+其中使用model方法目的是为了指定使用的表名，table的作用目的与之类似，更多内容参见[官方文档](https://gorm.io/zh_CN/docs/advanced_query.html#smart_select)
+```go 
+//智能选择字段 ------------------------------------ 结构体方法
+DB.Where(&Student{Name: "李元芳", Age: 0}).Find(&SSList) //这个不行是因为这里根据find中结构体名字进行表的查询，不对应
+// Table 'gorm.sses' doesn't exist
+
+var NEWs SS //SS中只包含id和name
+//查询id和name字段
+DB.Model(&SList).Find(&SSList)   //多个获取，其后跟结构体切片
+DB.Model(&Student{}).Find(&NEWs) //单个获取，其后跟结构体
+//两个相同表述，sql查询语句： SELECT `students`.`id`,`students`.`name` FROM `students`
+fmt.Println(NEWs)
+```
+
+# 排序
+```go
+//排序 根据年龄倒序
+var users []Student
+DB.Order("age desc").Find(&users)
+fmt.Println(users)
+// desc    降序
+// asc     升序
+```
+
+# 分页查询
+```go
+//分页查询
+//offset = pageSize * (pageNum - 1)
+// 一页两条，第1页
+DB.Limit(2).Offset(0).Find(&SList)
+fmt.Println(SList)
+// 第2页
+DB.Limit(2).Offset(2).Find(&SList)
+fmt.Println(SList)
+// 第3页
+DB.Limit(2).Offset(4).Find(&SList)
+fmt.Println(SList)
+```
+
+# 去重
+```go
+//去重
+//1.通过结构体进行 单列查询 ，再进行分组
+DB.Model(&Student{}).Distinct("age").Find(&SSSList)
+fmt.Println(SSSList)
+//[{32} {18} {23} {54} {14} {25} {26} {21}]
+
+//2.通过select+scan进行 单列查询， 再分组
+var ageList []int
+//DB.Table("students").Select("distinct age").Scan(&ageList) //直接在select中进行 去重
+DB.Table("students").Select("age").Distinct("age").Scan(&ageList)
+fmt.Println(ageList)
+//[32 18 23 54 14 25 26 21]
+```
+
+# 分组查询
+```go
+//分组查询--------------------------------
+// 查询男生的个数和女生的个数
+DB.Table("students").Select("count(*)").Group("gender").Scan(&ageList)
+fmt.Println(ageList)
+	//[6 3]
+
+// 查询男生的个数和女生的个数,增添一列表明 男生、女生
+type AggeGroup struct {
+	Gender int
+	Count  int `gorm:"column:count(id)"`
+}
+var agge []AggeGroup
+DB.Table("students").Select("count(id)", "gender").Group("gender").Scan(&agge)
+fmt.Println(agge)
+	//[{1 6} {0 3}]
+
+//在第二个基础上，再显示男女生的名字
+type AggeGroup2 struct {
+	Gender int
+	Count  int    `gorm:"column:count(id)"`
+	Name   string `gorm:"column:group_concat(name)"`
+}
+var agge2 []AggeGroup2
+// 查询男生的个数和女生的个数
+DB.Table("students").Select("count(id)", "gender", "group_concat(name)").Group("gender").Scan(&agge2)
+fmt.Println(agge2)
+	//[{0 3 李琦,晓梅,如燕} {1 6 李元芳,张武,枫枫,刘大,李武,魔灵}]
+```
+
+# 执行原生sql语句 （这里以分组查询为例）
+```go
+//执行原生sql 以分组查询为例
+//type AggeGroup2 struct {
+//	Gender int
+//	Count  int    `gorm:"column:count(id)"`
+//	Name   string `gorm:"column:group_concat(name)"`
+//}
+//var agge2 []AggeGroup2
+DB.Raw(`SELECT count(id), gender, group_concat(name) FROM students GROUP BY gender`).Scan(&agge2)
+fmt.Println(agge2)
+	//SELECT count(id), gender, group_concat(name) FROM students GROUP BY gender
+	//[{0 3 李琦,晓梅,如燕} {1 6 李元芳,张武,枫枫,刘大,李武,魔灵}]
+```
+
+# 子查询
+```go
+//子查询----------------------------查询年龄大于平均值的学生
+var users []Student
+DB.Model(Student{}).Where("age > (?)", DB.Model(Student{}).Select("avg(age)")).Find(&users)
+fmt.Println(users)
+//select * from students where age > (select avg(age) from students);
+```
+
+# 命名参数
+&emsp;&emsp;在查询信息较多的时候，如果都是？可能无法明白其含义，使用命名参数以赋予其具体含义。
+&emsp;&emsp;GORM 支持 sql.NamedArg 和 map[string]interface{}{} 形式的命名参数，例如:
+```go{.line-numbers}
+DB.Where("name = @name and age = @age", sql.Named("name", "枫枫"), sql.Named("age", 23)).Find(&SList)
+DB.Where("name = @name and age = @age", map[string]any{"name": "枫枫", "age": 23}).Find(&SList)
+fmt.Println(SList)
+//SELECT * FROM `students` WHERE name = '枫枫' and age = 23
+```
+
+# find到map
+```go
+var res []map[string]any
+DB.Table("students").Find(&res)
+for _, containt := range res {
+	fmt.Println(containt)
+}
+```
+
+# 查询引用Scope
+Scopes 允许你指定常用的查询，可以在调用方法时引用这些查询
+```go
+//查询引用scope 链式调用
+//// 返回 age>23 的查询
+//func Age23(db *gorm.DB) *gorm.DB {
+//	return db.Where("age > ?", 23)
+//}
+DB.Scopes(Age23).Find(&SList)
+fmt.Println(SList)
+// SELECT * FROM `students` WHERE age > 23
 ```
