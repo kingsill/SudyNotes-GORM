@@ -12,7 +12,7 @@ has many 与另一个模型建立了一对多的连接。 不同于 has one，�
 # 声明
 &emsp;&emsp;user为**主表**，由于一对多，在user结构中增加article切片；
 &emsp;&emsp;article表为**副表**，在其中加入外键关联，即主表名+ID，再加入user结构体
-```go
+```go<a name="示例"></a>
 // User 用户表 一个用户可以有多篇文章
 type User struct {
 	ID       uint   `gorm:"size:4"`
@@ -94,10 +94,55 @@ DB.Save(&User{
 	},
 })
 
+//这里save、create方法都可以
 //创建文章，关联已有用户
+//1.直接传入关联外键部分
+DB.Save(&Article{Title: "easyGo", UserID: 2})
+
+//2.查询过后传入对应结构体中
 var user User
-DB.Take(&user, 1) //查询已有用户
-DB.Save(&Article{Title: "c++", User: user})//将关联部分的User结构体传入
+DB.Take(&user, 1)                           //查询已有用户
+DB.Save(&Article{Title: "c++", User: user}) //将关联部分的User结构体传入
 ```
 
-# 外键添加、查询、嵌套预加载、删除、清楚外键关系。。。马上到来
+# 外键添加
+## 常规方法
+```go
+// 常规方法
+//常规方法-----------------------将id为8的文章和id为2的用户绑定
+//现有用户，这里id=2
+var user User
+DB.Take(&user, 2)
+
+//现有文章，id=8，未设置用户
+var article Article
+DB.Take(&article, 8)
+
+//方法1.给现有用户绑定文章
+user.Articles = []Article{article}//[{8 c语言 2 {0  []}}]
+DB.Save(&user)
+
+//方法2.给现有文章关联用户
+article.User = user //{2 wang2 []}
+DB.Save(&article)
+```
+
+## append方法
+association方法中为关联二表的部分，这里为articels和User
+```go
+//append方法--------将id为8的文章和id为2的用户绑定
+var user User
+DB.Take(&user, 2)
+var article Article
+DB.Take(&article, 8)
+//1.用户绑定文章
+//model在选表的同时也在选择对象
+//DB.Model(&User{ID: 2}).Association("Articles").Append(&article)
+DB.Model(&user).Association("Articles").Append(&article)
+//2.文章关联用户
+DB.Model(&article).Association("User").Append(&user)
+```
+
+[可点击链接](#示例)
+
+# 查询、嵌套预加载、删除、清楚外键关系。。。马上到来
