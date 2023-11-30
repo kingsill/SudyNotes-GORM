@@ -11,8 +11,11 @@ has many 与另一个模型建立了一对多的连接。 不同于 has one，�
 
 # 声明
 &emsp;&emsp;user为**主表**，由于一对多，在user结构中增加article切片；
-&emsp;&emsp;article表为**副表**，在其中加入外键关联，即主表名+ID，再加入user结构体
-```go<a name="示例"></a>
+&emsp;&emsp;article表为**副表**，在其中加入外键关联，即主表名+ID，再加入user结构体、
+
+<span id="jump"></span>
+
+```go
 // User 用户表 一个用户可以有多篇文章
 type User struct {
 	ID       uint   `gorm:"size:4"`
@@ -142,7 +145,230 @@ DB.Model(&user).Association("Articles").Append(&article)
 //2.文章关联用户
 DB.Model(&article).Association("User").Append(&user)
 ```
+[前文user、article定义部分](#jump)
 
-[可点击链接](#示例)
+# 查询、预加载
+&emsp;&emsp;GORM 可以通过 Preload 预加载 has many 关联的记录，查看 预加载 获取详情
+&emsp;&emsp;预加载的名字就是外键关联的属性名，**大小写、复数形式敏感**
+```go
+//查询 不加载，无法查看
+var userList []User
+DB.Find(&userList)
+fmt.Println(userList) 
+//[{1 wang []} {2 wang2 []}]
 
-# 查询、嵌套预加载、删除、清楚外键关系。。。马上到来
+user = User{}
+//查询 预加载
+DB.Preload("Articles").Take(&user, 1)
+fmt.Println(user) 
+//{1 wang [{1 golang 1 {0  []}} {2 python 1 {0  []}} {5 c++ 1 {0  []}}]}
+```
+## 嵌套预加载
+```go
+//嵌套预加载 结构体中内容再展示一层
+DB.Preload("Articles.User").Take(&user, 1)
+fmt.Println(user)
+//{1 wang [{1 golang 1 {1 wang []}} {2 python 1 {1 wang []}} {5 c++ 1 {1 wang []}}]}
+```
+查询文章，显示用户，并且显示用户关联的所有文章
+## 带条件的预加载
+```go
+//带条件的预加载
+//这里只预加载id=1的文章
+DB.Preload("Articles", "id=?", 1).Take(&user) //
+fmt.Println(user)//{1 wang [{1 golang 1 {0  []}}]}
+```
+自定义预加载等更深入内容请查看[官方文档](https://gorm.io/zh_CN/docs/preload.html)
+
+# 删除
+## 级联删除
+删除用户，与用户相关的文章也清除
+```go
+//级联删除
+user = User{}
+DB.Preload("Articles").Take(&user, 1)
+DB.Select("Articles").Delete(&user)
+```
+
+## 清楚外键关系
+将与用户关联的文章，外键设置为null；删除用户
+用户作为主表中数据无法直接删除
+```go
+// 将id=2的用户的文章与其断开关系,并将用户删除
+user = User{}
+DB.Preload("Articles").Take(&user, 2)
+DB.Model(&user).Association("Articles").Delete(&user.Articles)
+DB.Delete(&user)
+```
+
+所有代码集合：
+```go
+package main
+
+import (
+	"fmt"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
+)
+
+var DB *gorm.DB
+
+func init() {
+	username := "root"
+	password := "123456"
+	host := "127.0.0.1"
+	port := 3306
+	Dbname := "gorm"
+	timeout := "10s"
+
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local&timeout=%s", username, password, host, port, Dbname, timeout)
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Info),
+	})
+	if err != nil {
+		fmt.Println("连接数据库失败, error=", err)
+		return
+	}
+	DB = db
+	fmt.Println("数据库连接成功")
+}
+
+//表结构关联-----------------------
+// User 用户表 一个用户可以有多篇文章
+
+type User struct {
+	ID       uint   `gorm:"size:4"`
+	Name     string `gorm:"size:8"`
+	Articles []Article
+}
+
+// Article 文章表 一篇文章属于一个用户
+type Article struct {
+	ID     uint   `gorm:"size:4"`
+	Title  string `gorm:"size:16"`
+	UserID uint   `gorm:"size:4"`
+	User   User
+}
+
+//重写外键关联----------------------------
+//gorm的foreignKey备注写在对应的两个表的关联上
+//
+//type User1 struct {
+//	ID       uint       `gorm:"size:4"`
+//	Name     string     `gorm:"size:8"`
+//	Articles []Article1 `gorm:"foreignKey:UID"`
+//}
+//
+//type Article1 struct {
+//	ID    uint   `gorm:"size:4"`
+//	Title string `gorm:"size:16"`
+//	UID   uint   `gorm:"size:4"`
+//	User  User1  `gorm:"foreignKey:UID"`
+//}
+
+//重写引用----------------------------
+//备注写在对应的两个表的关联上
+
+//type User2 struct {
+//	ID       uint       `gorm:"size:4"`
+//	Name     string     `gorm:"size:8"`
+//	Articles []Article2 `gorm:"foreignKey:UserName;references:Name"`
+//}
+//
+//type Article2 struct {
+//	ID       uint   `gorm:"size:4"`
+//	Title    string `gorm:"size:16"`
+//	UserName string `gorm:"size:8"`
+//	User     User2  `gorm:"references:Name"`
+//}
+
+func main() {
+	//DB.AutoMigrate(&User{}, &Article{})
+	//DB.AutoMigrate(&User1{}, &Article1{})
+	//DB.AutoMigrate(&User2{}, &Article2{})
+
+	////创建用户的同时创建文章，并将两者关联
+	//DB.Save(&User{
+	//	Name: "wang2",
+	//	Articles: []Article{
+	//		{Title: "golang"},
+	//		{Title: "python"},
+	//	},
+	//})
+
+	////创建文章，关联已有用户
+	////1.直接传入关联外键部分
+	//DB.Save(&Article{Title: "easyGo", UserID: 2})
+	//
+	////2.查询过后传入对应结构体中
+	//var user User
+	//DB.Take(&user, 1)                           //查询已有用户
+	//DB.Save(&Article{Title: "c++", User: user}) //将关联部分的User结构体传入
+
+	//外键添加
+	//常规方法-----------------------将id为8的文章和id为2的用户绑定
+	//现有用户，这里id=2
+	//var user User
+	//DB.Take(&user, 2)
+
+	//现有文章，id=8，未设置用户
+	//var article Article
+	//DB.Take(&article, 8)
+
+	//方法1.给现有用户绑定文章
+	//user.Articles = []Article{article}//[{8 c语言 2 {0  []}}]
+	//DB.Save(&user)
+
+	//方法2.给现有文章关联用户
+	//article.User = user //{2 wang2 []}
+	//DB.Save(&article)
+	//-------------------------------------
+	//append方法--------将id为8的文章和id为2的用户绑定
+	var user User
+	DB.Take(&user, 2)
+	var article Article
+	DB.Take(&article, 8)
+	//1.用户绑定文章
+	//model在选表的同时也在选择对象
+	//DB.Model(&User{ID: 2}).Association("Articles").Append(&article)
+	DB.Model(&user).Association("Articles").Append(&article)
+	//2.文章关联用户
+	DB.Model(&article).Association("User").Append(&user)
+
+	//查询 不加载，无法查看
+	var userList []User
+	DB.Find(&userList)
+	fmt.Println(userList) //[{1 wang []} {2 wang2 []}]
+
+	user = User{}
+	//查询 预加载
+	DB.Preload("Articles").Take(&user, 1)
+	fmt.Println(user) //{1 wang [{1 golang 1 {0  []}} {2 python 1 {0  []}} {5 c++ 1 {0  []}}]}
+
+	user = User{}
+	//嵌套预加载 结构体中内容再展示一层
+	DB.Preload("Articles.User").Take(&user, 1)
+	fmt.Println(user)
+	//{1 wang [{1 golang 1 {1 wang []}} {2 python 1 {1 wang []}} {5 c++ 1 {1 wang []}}]}
+
+	user = User{}
+	//带条件的预加载
+	//这里只预加载id=1的文章
+	DB.Preload("Articles", "id=?", 1).Take(&user) //
+	fmt.Println(user)
+	//{1 wang [{1 golang 1 {0  []}}]}
+
+	// 将id=2的用户的文章与其断开关系,并将用户删除
+	user = User{}
+	DB.Preload("Articles").Take(&user, 2)
+	DB.Model(&user).Association("Articles").Delete(&user.Articles)
+	DB.Delete(&user)
+
+	//级联删除
+	user = User{}
+	DB.Preload("Articles").Take(&user, 1)
+	DB.Select("Articles").Delete(&user)
+}
+
+```
