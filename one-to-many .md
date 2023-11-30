@@ -1,4 +1,5 @@
-# 一对多关系 Has Many部分
+[toc]
+# 一对多关系 Has Many-belongs to
 [官方文档](https://gorm.io/zh_CN/docs/has_many.html#Has-Many)
 has many 与另一个模型建立了一对多的连接。 不同于 has one，拥有者可以有零或多个关联模型。
 >老板与员工
@@ -9,10 +10,12 @@ has many 与另一个模型建立了一对多的连接。 不同于 has one，�
 
 &emsp;&emsp;例如，您的应用包含 user 和 article 模型，且每个 user 可以有多篇 article。
 
-# 声明
+## 声明 belongs to
 &emsp;&emsp;user为**主表**，由于一对多，在user结构中增加article切片；
-&emsp;&emsp;article表为**副表**，在其中加入外键关联，即主表名+ID，再加入user结构体、
+&emsp;&emsp;article表为**副表**，在其中加入外键关联，即主表名+ID，再加入user结构体
 
+&emsp;&emsp;``belongs to`` 会与另一个模型建立了一对一的连接。 这种模型的每一个实例都“属于”另一个模型的一个实例。
+&emsp;&emsp;下面中的``user``和``article``由于是一对多的关系，**一** 的结构体中有多的切片，**多** 的结构体中包含以的单独结构体。(在一对一关系中，通常在子表结构体-有外键的一边-中包含主表的结构体，具体可以见[一对一部分的文章]())
 <span id="jump"></span>
 
 ```go
@@ -38,7 +41,7 @@ DB.AutoMigrate(&User{}, &Article{})
 
 ![Alt text](image-1.png)
 
-# 重写外键关联
+## 重写外键关联
 &emsp;&emsp;想要使用另一个字段作为外键，您可以使用 foreignKey 标签自定义它：
 ```go
 //重写外键关联----------------------------
@@ -58,7 +61,7 @@ type Article1 struct {
 ```
 关联外键的数据类型仍需一致，但是字段名不再受限制
 
-# ~~重写引用~~ 
+## ~~重写引用~~ 
 
 >**这里博主大失败，最后也没有搞出来，希望过路大神解答**
 这里贴[官方文档](https://docs.fengfengzhidao.com/#/docs/gorm%E6%96%87%E6%A1%A3/7.%E4%B8%80%E5%AF%B9%E5%A4%9A%E5%85%B3%E7%B3%BB?id=%e9%87%8d%e5%86%99%e5%a4%96%e9%94%ae%e5%bc%95%e7%94%a8)
@@ -86,7 +89,7 @@ type Article2 struct {
 报错信息
 > Error 1170 (42000): BLOB/TEXT column 'company_id' used in key specification without a key length
 
-# 一对多的添加
+## 一对多的添加
 ```go
 //创建用户的同时创建文章，并将两者关联
 DB.Save(&User{
@@ -108,8 +111,8 @@ DB.Take(&user, 1)                           //查询已有用户
 DB.Save(&Article{Title: "c++", User: user}) //将关联部分的User结构体传入
 ```
 
-# 外键添加
-## 常规方法
+## 外键添加
+### 常规方法
 ```go
 // 常规方法
 //常规方法-----------------------将id为8的文章和id为2的用户绑定
@@ -130,7 +133,7 @@ article.User = user //{2 wang2 []}
 DB.Save(&article)
 ```
 
-## append方法
+### append方法
 association方法中为关联二表的部分，这里为articels和User
 ```go
 //append方法--------将id为8的文章和id为2的用户绑定
@@ -147,8 +150,8 @@ DB.Model(&article).Association("User").Append(&user)
 ```
 [前文user、article定义部分](#jump)
 
-# 查询、预加载
-&emsp;&emsp;GORM 可以通过 Preload 预加载 has many 关联的记录，查看 预加载 获取详情
+## 查询、预加载
+&emsp;&emsp;GORM 可以通过 Preload 预加载 has many 关联的记录，查看 [预加载](https://gorm.io/zh_CN/docs/preload.html) 获取详情
 &emsp;&emsp;预加载的名字就是外键关联的属性名，**大小写、复数形式敏感**
 ```go
 //查询 不加载，无法查看
@@ -163,7 +166,7 @@ DB.Preload("Articles").Take(&user, 1)
 fmt.Println(user) 
 //{1 wang [{1 golang 1 {0  []}} {2 python 1 {0  []}} {5 c++ 1 {0  []}}]}
 ```
-## 嵌套预加载
+### 嵌套预加载
 ```go
 //嵌套预加载 结构体中内容再展示一层
 DB.Preload("Articles.User").Take(&user, 1)
@@ -171,7 +174,7 @@ fmt.Println(user)
 //{1 wang [{1 golang 1 {1 wang []}} {2 python 1 {1 wang []}} {5 c++ 1 {1 wang []}}]}
 ```
 查询文章，显示用户，并且显示用户关联的所有文章
-## 带条件的预加载
+### 带条件的预加载
 ```go
 //带条件的预加载
 //这里只预加载id=1的文章
@@ -180,8 +183,8 @@ fmt.Println(user)//{1 wang [{1 golang 1 {0  []}}]}
 ```
 自定义预加载等更深入内容请查看[官方文档](https://gorm.io/zh_CN/docs/preload.html)
 
-# 删除
-## 级联删除
+## 删除
+### 级联删除
 删除用户，与用户相关的文章也清除
 ```go
 //级联删除
@@ -190,7 +193,7 @@ DB.Preload("Articles").Take(&user, 1)
 DB.Select("Articles").Delete(&user)
 ```
 
-## 清楚外键关系
+### 清楚外键关系
 将与用户关联的文章，外键设置为null；删除用户
 用户作为主表中数据无法直接删除
 ```go

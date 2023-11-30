@@ -77,3 +77,12 @@ First Header | Second Header
 ------------ | -------------
 Content from cell 1 | Content from cell 2
 Content in the first column | Content in the second column
+
+ 自动生成目录
+[toc]
+
+使用html语法进行同文件页面的跳转
+<span id="jump"></span>
+[前文user、article定义部分](#jump)
+
+
