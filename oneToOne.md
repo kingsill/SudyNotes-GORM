@@ -1,3 +1,4 @@
+[toc]
 # 一对一关系-Has One-belongs to
 [官方文档](https://gorm.io/zh_CN/docs/has_one.html)
 ``has one``与另一个模型建立一对一的关联，但它和一对一关系有些许不同。 这种关联表明一个模型的每个实例都包含或拥有另一个模型的一个实例。
@@ -81,3 +82,34 @@ DB.Create(&User{
 //DB.Save(&User{Name: "cc"})
 DB.Save(&IDCard{ID: 456, UserID: 2})
 ```
+## 查询
+&emsp;&emsp;为了方便从主表结构体查询子表内容，或者相互查询，可以采用类似如下的定义方法
+```go
+type User struct {
+	ID     uint    `gorm:"size:16"`
+	Name   string  `gorm:"size:8"`
+	IDCard *IDCard //通过idcard获得详细信息,进行后续查询，同时通过指针传递防止产生结构体嵌套
+	//谁是指针不明确，怎么选择取决于具体的应用
+}
+
+type IDCard struct {
+	ID     uint   `gorm:"size:16"`
+	Age    int    `gorm:"size:4"`
+	Addr   string `gorm:"size:16"`
+	UserID uint   `gorm:"size:16"` //外键
+	User   User   //关联的主表结构体
+}
+```
+查询语句：
+```go
+var user User
+DB.Preload("IDCard").Take(&user, 2)
+//{2 cc 0xc0001a8410}
+marshal, _ := json.Marshal(user)//通过json转换显示指针对应内容
+fmt.Println(string(marshal))
+//{"ID":2,"Name":"cc","IDCard":{"ID":456,"Age":0,"Addr":"","UserID":2,"User":{"ID":0,"Name":"","IDCard":null}}}
+
+```
+
+## 删除
+一对一的删除与多对多的相同，可以查看一对一的[删除部分](https://blog.csdn.net/kingsill/article/details/134657310?spm=1001.2014.3001.5501#_184)
