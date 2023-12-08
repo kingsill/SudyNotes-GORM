@@ -62,6 +62,14 @@ func main() {
 
 ```
 ### 枚举的实现举例
+在需要输出的时候（print，json），自定义类型就变成了字符串
+>复习阶段：数据类型的转换
+Go 语言类型转换基本格式如下：
+>```go
+>type_name(expression)
+>```
+>type_name 为类型，expression 为表达式。
+字符串类型的数据转换可以用到strconv,strconv.atoi将字符串转换为int;strconv.itoa将int转换为字符串
 ```go
 package main
 
@@ -73,23 +81,7 @@ import (
 
 type WeekDay int //定义一个数值的类型别名，方便显示
 
-var WeekStringList = []string{"Sunday", "Monday", "Tuesday", "Thursday", "Wednesday", "Friday", "Saturday"}
-var WeekTypeList = []WeekDay{Sunday, Monday, Tuesday, Thursday, Wednesday, Friday, Saturday}
-
-func (WeekDay WeekDay) String() string {
-
-	s := WeekStringList[WeekDay-1]
-	fmt.Println(s)
-	return s
-}
-
-func (WeekDay WeekDay) MarshalJSON() ([]byte, error) {
-
-	s, _ := json.Marshal(WeekDay.String())
-	return s, nil
-}
-
-// 超级落后
+// 定义weekday与整数的对应
 const (
 	Sunday WeekDay = iota + 1
 	Monday
@@ -100,28 +92,38 @@ const (
 	Saturday
 )
 
-/*
-	func (WeekDay WeekDay) MarshalJSON() ([]byte, error) {
-		var str string
-		switch WeekDay {
-		case Sunday:
-			str = "Sunday"
-		case Monday:
-			str = "Monday"
-		case Tuesday:
-			str = "Tuesday"
-		case Thursday:
-			str = "Thursday"
-		case Wednesday:
-			str = "Wednesday"
-		case Friday:
-			str = "Friday"
-		case Saturday:
-			str = "Saturday"
+var WeekStringList = []string{"Sunday", "Monday", "Tuesday", "Thursday", "Wednesday", "Friday", "Saturday"}
+var WeekTypeList = []WeekDay{Sunday, Monday, Tuesday, Thursday, Wednesday, Friday, Saturday}
+
+// 通过定义weekday的string方法将其本质int映射为对应的string 自定义》字符
+// 实现了自定义weekday类型的string接口，会在输出、打印weekday时自动调用，其被包含在stringer包中，具体可查阅该包
+func (W WeekDay) String() string {
+	s := WeekStringList[W]
+	//fmt.Println("from string 方法", s)
+	return s
+}
+
+func (W WeekDay) MarshalJSON() ([]byte, error) {
+	s, _ := json.Marshal(W.String())
+	//fmt.Println("marshal启用")
+	return s, nil
+
+}
+
+// ParseStrWeekday 将字符串类型转化为自定义类型 字符串》自定义
+func (W *WeekDay) ParseStrWeekday(week string) {
+	for i, v := range WeekStringList {
+		if v == week {
+			*W = WeekTypeList[i]
+			fmt.Println(*W)
 		}
-		return json.Marshal(str)
 	}
-*/
+}
+
+// ParseIntWeekday Int》weekday自定义类型
+func (W *WeekDay) ParseIntWeekday(week int) {
+	*W = WeekTypeList[week-1]
+}
 
 type DayInfo struct {
 	WeekDay WeekDay   `json:"WeekDay"`
@@ -135,7 +137,16 @@ func main() {
 	}
 	re, _ := json.Marshal(December7th)
 
-	fmt.Printf(string(re))
+	fmt.Println(string(re))
+
+	//通过ParseStrWeekday和ParseIntWeekday这两个方法，实现了输入字符串和int都可以转换为weekday类型，同时通过该类型的string接口的实现可以在输出时自动以对应的字符串了类型进行输出
+	var w WeekDay
+	w.ParseStrWeekday("Sunday")
+	fmt.Println("我输入的字符串“Sunday”，输出结果为：", w)
+
+	w.ParseIntWeekday(2)
+	fmt.Println("我输入的int类型 2，输出结果为： ", w)
+
 }
 
 ```
